@@ -1,42 +1,57 @@
 const axios = require('axios');
+//CALLOUT CURRENCY NOT ACCOMMODATED YET
+
 
 // This is the asynchronous function called from the API middleware
 // It gathers all data into a single payload
 async function consolidateData(startDate, endDate, seller) {
-    let dataToSend = {}
-    let orders = await orderFetch(startDate, endDate, seller)
-    let products = await productFetch(seller)
-    let sellers = await partnerFetch()
+    
+        let dataToSend = {}
+        const fetchedOrders = await orderFetch(startDate, endDate, seller)
+        const fetchedProducts = await productFetch(seller)
+        const fetchedSellers = await partnerFetch()
+    
+    
+    console.log(`Start Date: ${startDate}, End Date: ${endDate}, Seller: ${seller}`);
+    console.log(`Fetched ${fetchedOrders.currentOrders.length} Current Orders`);
+    console.log(`Fetched ${fetchedOrders.previousOrders.length} Previous Orders`);
+    console.log(`Fetched ${fetchedProducts.length} Products`)
+    console.log(`Fetched ${fetchedSellers.length} Sellers`)
 
-    dataToSend = {
-        dates: dateCreator(startDate, endDate),
-        orderList: orders,
-        salesReport: createSalesReport(orders),
-        productReport: createProductReport(products, orders, sellers),
+    // Each key in the response payload makes a function call to gather the necessary data
 
-    }
-
+        dataToSend = {
+            dataSending: true,
+            salesReport: await createSalesReport(fetchedOrders),
+            // sellerReport: await createSellerReport(fetchedOrders, fetchedSellers, fetchedProducts)
+            productReport: await createProductReport(fetchedProducts, fetchedOrders),
+            // operations
+            // finance
+            // inventoryReport:
+        }
     return dataToSend
 }
 
 // Create an object of key date values
 function dateCreator(startDate, endDate) {
-    var difference = Math.round((endDate - startDate) / 86400000);
+    var difference = Math.round(new Date(endDate) - new Date(startDate));
     var dates = {
-        startDate: startDate,
-        endDate: endDate,
+        startDate: new Date(startDate),
+        endDate: new Date(endDate),
         difference: difference,
-        previousStartDate: endDate - difference,
-        previousEndDate: startDate
+        previousStartDate: new Date(new Date(startDate) - difference),
+        previousEndDate: new Date(startDate)
     }
-
     return dates
 }
 // BEGIN DATA FETCHING FROM CONVICTIONAL
 // Get the orders from Convictional account
-function orderFetch(startDate, endDate, seller) {
-    // Make a request for a user with a given ID
-    axios.get('https://api.convictional.com/orders', {
+async function orderFetch(startDate, endDate, seller) {
+    // Create an object of important dates
+    var dates = dateCreator(startDate, endDate)
+
+    // Make a request for all orders
+    return axios.get('https://api.convictional.com/orders', {
         headers: {
             'Authorization': process.env.CONVICTIONAL_API_KEY
         }
@@ -44,36 +59,62 @@ function orderFetch(startDate, endDate, seller) {
         .then(function (response) {
             // handle success
             var orders = response.data;
+            var sortedOrders = {
+                currentOrders: [],
+                previousOrders: []
+            }
             // First filter the orders by the supplied date range
             var dateFilteredOrders = orders.filter(order => {
                 var orderDate = new Date(order.date);
-                return orderDate >= startDate && orderDate <= endDate
+
+                return orderDate.getTime() >= dates.startDate.getTime() && orderDate.getTime() <= dates.endDate.getTime()
             })
+            var previousFilteredOrders = orders.filter(order => {
+                var orderDate = new Date(order.date);
+
+                return orderDate.getTime() >= dates.previousStartDate.getTime() && orderDate.getTime() <= dates.previousEndDate.getTime()
+            })
+            sortedOrders = {
+                currentOrders: dateFilteredOrders,
+                previousOrders: previousFilteredOrders
+            }
+
             // Then if a seller was supplied, filter the orders by that sellers' orders
-            if (seller != null) {
+            if (seller != 'null') {
+                var sellerSortedOrders = {
+                    currentOrders: [],
+                    previousOrders: []
+                }
 
                 var sellerFilteredOrders = dateFilteredOrders.filter(order => {
-                    var orderSeller = order.sellerId;
+                    var orderSeller = order.sellerCompanyId;
                     return seller == orderSeller
                 })
-                return sellerFilteredOrders
+                var sellerPreviousFilteredOrders = previousFilteredOrders.filter(order => {
+                    var orderSeller = order.sellerCompanyId;
+                    return seller == orderSeller
+                })
+                sellerSortedOrders = {
+                    currentOrders: sellerFilteredOrders,
+                    previousOrders: sellerPreviousFilteredOrders
+                }
+                // console.log(`Fetched ${sellerSortedOrders.currentOrders.length} Seller Sorted Orders`);
+                return sellerSortedOrders
             } else {
-
-
-                return dateFilteredOrders
+                // console.log(`Fetched ${sortedOrders.currentOrders.length} Sorted Orders`);
+                return sortedOrders
             }
         })
         .catch(function (error) {
             // handle error
             console.log(error);
         })
-
 }
 
 //Get all the products from Convictional
-function productFetch(seller) {
+async function productFetch(seller) {
     // Make a request for a user with a given ID
-    axios.get('https://api.convictional.com/products', {
+    return axios.get('https://api.convictional.com/products', {
         headers: {
             'Authorization': process.env.CONVICTIONAL_API_KEY
         }
@@ -83,13 +124,15 @@ function productFetch(seller) {
             var products = response.data;
 
             // If a seller was supplied, filter the products by those from that seller
-            if (seller != null) {
+            if (seller != 'null') {
                 var filteredProducts = products.filter(product => {
                     var productSeller = product.companyId
-                    return seller == productSeller
+                    return productSeller == seller
                 })
+                // console.log(`Fetched ${filteredProducts.length} Filtered Products`);
                 return filteredProducts
             } else {
+                // console.log(`Fetched ${products.length} Products`);
                 return products
             }
         })
@@ -99,16 +142,16 @@ function productFetch(seller) {
         })
 }
 
-function partnerFetch() {
+async function partnerFetch() {
     // Make a request for a user with a given ID
-    axios.get('https://api.convictional.com/partners', {
+    return axios.get('https://api.convictional.com/partners', {
         headers: {
             'Authorization': process.env.CONVICTIONAL_API_KEY
         }
     })
         .then(function (response) {
             // handle success
-            var partners = response.data;
+            var partners = response.data.data;
             return partners
         })
         .catch(function (error) {
@@ -116,56 +159,192 @@ function partnerFetch() {
             console.log(error);
         })
 }
-
 // END CONVICTIONAL DATA FETCHING
-
 // BEGIN REPORT CREATION
-
 // Organize all of the Sales values
-function createSalesReport(orders, sellers) {
+async function createSalesReport(orders) {
+    let orderValues = orders.currentOrders.map(x => x.totalRetailPrice)
+    let previousOrderValues = orders.previousOrders.map(x => x.totalRetailPrice)
+
+
+    let profitValues = orders.currentOrders.map(x => x.totalRetailPrice - x.totalPrice)
+    let previousProfitValues = orders.previousOrders.map(x => x.totalRetailPrice - x.totalPrice)
+
     let salesBreakdown = {
         totalSales: {
-            totalSales: '',
-            previousTotalSales: '',
-            deltaTotalSalesPercent: ''
+            totalSales: sumArray(orderValues),
+            previousTotalSales: sumArray(previousOrderValues),
+            deltaTotalSalesPercent: percentDifference(sumArray(orderValues), sumArray(previousOrderValues))
         },
+        // DELETE SAMPLE DATA WHEN NET IS AVAILABLE
         netSales: {
-            netSales: '',
-            previousNetSales: '',
-            deltaNetSalesPercent: ''
+            netSales: 1000,
+            previousNetSales: 650,
+            deltaNetSalesPercent: percentDifference(1000, 650)
         },
-        topSellers: [
-
-        ],
-        sellerTrends: [
-
-        ]
+        profit: {
+            profit: sumArray(profitValues),
+            previousProfit: sumArray(previousProfitValues),
+            deltaProfitPercent: percentDifference(sumArray(profitValues), sumArray(previousProfitValues))
+        }
     }
-
     return salesBreakdown
 }
 
+// Organize All of the Seller Values
+async function createSellerReport(orders, sellers, products) {
+
+    let sellerBreakdown = sellers.map(seller => {
+
+        // Filter the Current and Previous supplied Orders by the Seller
+        let sellerCurrentOrderFilter = orders.currentOrders.filter(order => {
+            return order.sellerId == seller.sellerCompanyId
+        })
+        let sellerPreviousOrderFilter = orders.previousOrders.filter(order => {
+            return order.sellerId == seller.sellerCompanyId
+        })
+
+        // Extract the Sellers Variants to Run Margin Analysis
+        let sellerVariantArray = []
+        let sellerProductFilter = products.filter(product => {
+            return product.companyId == seller.sellerCompanyId
+        })
+        sellerProductFilter.forEach(product => {
+            product.variants.forEach(variant => {
+                sellerVariantArray.push(variant)
+            })
+        })
+
+        // Run Margin Analysis
+        function calcAvgProductMargin() {
+            let variantMargins = sellerVariantArray.map(variant => {
+                return variant.retailPrice - variant.basePrice
+            })
+
+            let summedVariantMargins = sumArray(variantMargins)
+
+            return summedVariantMargins / variantMargins.length
+        }
+
+        function calcAvgProductMarginPercent() {
+            let variantMargins = sellerVariantArray.map(variant => {
+                return 100 * (variant.retailPrice - variant.basePrice) / variant.retailPrice
+            })
+
+            let summedVariantMargins = sumArray(variantMargins)
+
+            return summedVariantMargins / variantMargins.length
+        }
+
+        // Run Sales Volume Analysis
+        function calcSalesVolume(array) {
+            let salesValues = array.map(e => {
+                return e.totalRetailPrice
+            })
+            return sumArray(salesValues)
+        }
+
+        // Run Profit Analysis
+        function calcProfit(array) {
+            let profitValues = array.map(e => {
+                return e.totalRetailPrice - e.totalPrice
+            })
+            return sumArray(profitValues)
+        }
+
+
+        // Collate the Seller Statistics into a single response
+        return (
+            {
+                sellerName: seller.sellerName,
+                sellerId: seller.sellerCompanyId,
+                averageShipTime: seller.averageShipTime,
+                averageReturnRate: seller.averageReturnRate,
+                numberOfProducts: sellerProductFilter.length,
+                averageProductMargin: calcAvgProductMargin(),
+                averageProductMarginPercent: calcAvgProductMarginPercent(),
+                orders: sellerCurrentOrderFilter.length,
+                salesVolume: calcSalesVolume(sellerCurrentOrderFilter),
+                profit: calcProfit(sellerCurrentOrderFilter),
+                previousOrders: sellerPreviousOrderFilter.length,
+                previousSalesVolume: calcSalesVolume(sellerPreviousOrderFilter),
+                previousProfit: calcProfit(sellerPreviousOrderFilter),
+                trendOrders: percentDifference(sellerCurrentOrderFilter.length, sellerPreviousOrderFilter.length),
+                trendSalesVolume: percentDifference(calcSalesVolume(sellerCurrentOrderFilter), calcSalesVolume(sellerPreviousOrderFilter)),
+                trendProfit: percentDifference(calcProfit(sellerCurrentOrderFilter), calcProfit(sellerPreviousOrderFilter)),
+            }
+        )
+    })
+
+    return sellerBreakdown
+}
+
 // Organize All of the Product Values
-function createProductReport(products, orders, sellers) {
-    let productBreakdown = {
-        products: [
+function createProductReport(products, orders) {
+    
+    // Break Product into Variants
+    let variantsList = [];
+    products.forEach(product => {
+        product.variants.forEach(variant => {
+            let variantObject = {
+                title: `${product.title} | ${variant.title}`,
+                code: variant.code,
+                productCode: product.code,
+                vendor: product.vendor,
+                companyId: product.companyId,
+                partnerPrice: variant.partnerPrice,
+                basePrice: variant.basePrice,
+                orders: 0,
+                quantitySold: 0,
+                salesVolume: 0,
+                profit: 0,
+                previousOrders: 0,
+                previousQuantitySold: 0,
+                previousSalesVolume: 0,
+                previousProfit: 0,
+            }
+            variantsList.push(variantObject)
+        })
+    })
 
-        ],
-    }
+    // Cycle through Order Line Items, Adding values to the Variant Listings
+    orders.currentOrders.forEach(order => {
+        order.items.forEach(item => {
+            variantsList.forEach(variant => {
+                if (item.buyerVariantCode == variant.code) {
+                    variant.orders += 1
+                    variant.quantitySold += item.quantity
+                    variant.salesVolume += item.extendedRetailPrice
+                    variant.profit += (item.extendedRetailPrice - item.extendedPrice)
+                }
+            })
+        })
+    })
 
-    let productModel = {
-        title: '',
-        SKU: '',
-        vendor: '',
-        margin: '',
-        orders: '',
-        salesVolume: '',
-        profit: '',
-        previousOrders: '',
-        previousSalesVolume: '',
-        trendOrders: '',
-        trendSalesVolume: '',
-    }
+    orders.previousOrders.forEach(order => {
+        order.items.forEach(item => {
+            variantsList.forEach(variant => {
+                if (item.buyerVariantCode == variant.code) {
+                    variant.previousOrders += 1
+                    variant.previousQuantitySold += item.quantity
+                    variant.previousSalesVolume += item.extendedRetailPrice
+                    variant.previousProfit += (item.extendedRetailPrice - item.extendedPrice)
+                }
+            })
+        })
+    })
+
+    let productBreakdown = variantsList.map(variant => {
+        return (
+            {
+                ...variant,
+                trendOrders: percentDifference(variant.orders,variant.previousOrders),
+                trendQuantitySold: percentDifference(variant.quantitySold,variant.previousQuantitySold),
+                trendSalesVolume: percentDifference(variant.salesVolume,variant.previousSalesVolume),
+                trendProfit: percentDifference(variant.profit,variant.previousProfit)
+            }
+        )
+    })
 
     return productBreakdown
 }
@@ -179,6 +358,7 @@ function createProductReport(products, orders, sellers) {
 
 // Organize All of the Inventory Values
 
+//END REPORT ORGANIZATION
 
 // MATH
 // Sum Array
@@ -195,11 +375,11 @@ function percentDifference(current, previous) {
     var delta = current - previous;
     let result = 0;
     if (delta < 0) {
-        result = +0-(100-(previous/current)).toFixed(2)
-      } else {
-        result = +(current/previous).toFixed(2)
-      }
-      return result
+        result = +0 - (100 - (previous / current)).toFixed(2)
+    } else {
+        result = +(current / previous).toFixed(2)
+    }
+    return result
 }
 
 module.exports = { consolidateData }
