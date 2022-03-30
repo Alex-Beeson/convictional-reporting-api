@@ -11,19 +11,17 @@ async function consolidateData(startDate, endDate, seller) {
         const fetchedProducts = await productFetch(seller)
         const fetchedSellers = await partnerFetch()
     
-    
-    console.log(`Start Date: ${startDate}, End Date: ${endDate}, Seller: ${seller}`);
-    console.log(`Fetched ${fetchedOrders.currentOrders.length} Current Orders`);
-    console.log(`Fetched ${fetchedOrders.previousOrders.length} Previous Orders`);
-    console.log(`Fetched ${fetchedProducts.length} Products`)
-    console.log(`Fetched ${fetchedSellers.length} Sellers`)
+        // Console Logs to check API Responses
+    // console.log(`Start Date: ${startDate}, End Date: ${endDate}, Seller: ${seller}`);
+    // console.log(`Fetched ${fetchedOrders.currentOrders.length} Current Orders`);
+    // console.log(`Fetched ${fetchedOrders.previousOrders.length} Previous Orders`);
+    // console.log(`Fetched ${fetchedProducts.length} Products`)
+    // console.log(`Fetched ${fetchedSellers.length} Sellers`)
 
     // Each key in the response payload makes a function call to gather the necessary data
-
         dataToSend = {
-            dataSending: true,
-            salesReport: await createSalesReport(fetchedOrders),
-            // sellerReport: await createSellerReport(fetchedOrders, fetchedSellers, fetchedProducts)
+            //salesReport: await createSalesReport(fetchedOrders),
+            //sellerReport: await createSellerReport(fetchedOrders, fetchedSellers, fetchedProducts),
             productReport: await createProductReport(fetchedProducts, fetchedOrders),
             // operations
             // finance
@@ -51,7 +49,7 @@ async function orderFetch(startDate, endDate, seller) {
     var dates = dateCreator(startDate, endDate)
 
     // Make a request for all orders
-    return axios.get('https://api.convictional.com/orders', {
+    return axios.get('https://api.convictional.com/orders?page=0&limit=250', {
         headers: {
             'Authorization': process.env.CONVICTIONAL_API_KEY
         }
@@ -114,7 +112,7 @@ async function orderFetch(startDate, endDate, seller) {
 //Get all the products from Convictional
 async function productFetch(seller) {
     // Make a request for a user with a given ID
-    return axios.get('https://api.convictional.com/products', {
+    return axios.get('https://api.convictional.com/products?page=0&limit=250', {
         headers: {
             'Authorization': process.env.CONVICTIONAL_API_KEY
         }
@@ -198,10 +196,11 @@ async function createSellerReport(orders, sellers, products) {
 
         // Filter the Current and Previous supplied Orders by the Seller
         let sellerCurrentOrderFilter = orders.currentOrders.filter(order => {
-            return order.sellerId == seller.sellerCompanyId
+            return order.sellerCompanyId == seller.sellerCompanyId
         })
+
         let sellerPreviousOrderFilter = orders.previousOrders.filter(order => {
-            return order.sellerId == seller.sellerCompanyId
+            return order.sellerCompanyId == seller.sellerCompanyId
         })
 
         // Extract the Sellers Variants to Run Margin Analysis
@@ -280,7 +279,7 @@ async function createSellerReport(orders, sellers, products) {
 }
 
 // Organize All of the Product Values
-function createProductReport(products, orders) {
+async function createProductReport(products, orders) {
     
     // Break Product into Variants
     let variantsList = [];
@@ -288,7 +287,7 @@ function createProductReport(products, orders) {
         product.variants.forEach(variant => {
             let variantObject = {
                 title: `${product.title} | ${variant.title}`,
-                code: variant.code,
+                sellerVariantId: variant.id,
                 productCode: product.code,
                 vendor: product.vendor,
                 companyId: product.companyId,
@@ -311,7 +310,7 @@ function createProductReport(products, orders) {
     orders.currentOrders.forEach(order => {
         order.items.forEach(item => {
             variantsList.forEach(variant => {
-                if (item.buyerVariantCode == variant.code) {
+                if (item.sellerVariantCode == variant.sellerVariantId) {
                     variant.orders += 1
                     variant.quantitySold += item.quantity
                     variant.salesVolume += item.extendedRetailPrice
