@@ -20,12 +20,12 @@ async function consolidateData(startDate, endDate, seller) {
 
     // Each key in the response payload makes a function call to gather the necessary data
         dataToSend = {
-            //salesReport: await createSalesReport(fetchedOrders),
-            //sellerReport: await createSellerReport(fetchedOrders, fetchedSellers, fetchedProducts),
+            salesReport: await createSalesReport(fetchedOrders),
+            sellerReport: await createSellerReport(fetchedOrders, fetchedSellers, fetchedProducts),
             productReport: await createProductReport(fetchedProducts, fetchedOrders, startDate, endDate),
+            orders: fetchedOrders,
             // operations
             // finance
-            // inventoryReport:
         }
     return dataToSend
 }
@@ -295,7 +295,7 @@ async function createProductReport(products, orders, startDate, endDate) {
                 companyId: product.companyId,
                 partnerPrice: variant.partnerPrice,
                 basePrice: variant.basePrice,
-                unitMargin: variant.partnerPrice - variant.basePrice,
+                unitMargin: +(variant.partnerPrice - variant.basePrice).toFixed(2),
                 inventoryQuantity: variant.inventory_quantity,
                 orders: 0,
                 quantitySold: 0,
@@ -318,7 +318,7 @@ async function createProductReport(products, orders, startDate, endDate) {
                     variant.orders += 1
                     variant.quantitySold += item.quantity
                     variant.salesVolume += item.extendedRetailPrice
-                    variant.profit += (item.extendedRetailPrice - item.extendedPrice)
+                    variant.profit += +(item.extendedRetailPrice - item.extendedPrice).toFixed(2)
                 }
             })
         })
@@ -347,14 +347,10 @@ async function createProductReport(products, orders, startDate, endDate) {
         const a = Math.round(.8 * totalCompanySales) * 100 / 100;
         const b = a + Math.round(.15 * totalCompanySales) * 100 / 100;
         const c = b + Math.round(.05 * totalCompanySales) * 100 / 100;
-        console.log(a)
-        console.log(b)
-        console.log(c)
         
         var indexOf = variantsList.findIndex(variant => {
             return variant.sellerVariantId === id;
         })
-        console.log(indexOf)
         
         let valueToTest = 0;
         
@@ -362,8 +358,6 @@ async function createProductReport(products, orders, startDate, endDate) {
 
             valueToTest += variantsList[i].salesVolume
         }
-        
-        console.log("Resulting Test Value " + valueToTest)
 
         if (valueToTest <= a) {
             return "A"
@@ -383,12 +377,12 @@ async function createProductReport(products, orders, startDate, endDate) {
                 trendQuantitySold: percentDifference(variant.quantitySold,variant.previousQuantitySold),
                 trendSalesVolume: percentDifference(variant.salesVolume,variant.previousSalesVolume),
                 trendProfit: percentDifference(variant.profit,variant.previousProfit),
-                averageDailySales: variant.quantitySold / dates.daysDifference,
+                averageDailySales: +(variant.quantitySold / dates.daysDifference).toFixed(2),
                 daysOfInventoryRemaining: variant.inventoryQuantity / (variant.quantitySold / dates.daysDifference),
                 abcAnalysis: assessProductGrade(variant.sellerVariantId),
-                totalValueOfInventoryPrice: variant.inventoryQuantity * variant.partnerPrice,
-                totalValueOfInventoryCost: variant.inventoryQuantity * variant.basePrice,
-                sellThroughRate: (variant.quantitySold / variant.inventoryQuantity)*100
+                totalValueOfInventoryPrice: +(variant.inventoryQuantity * variant.partnerPrice).toFixed(2),
+                totalValueOfInventoryCost: +(variant.inventoryQuantity * variant.basePrice).toFixed(2),
+                sellThroughRate: +((variant.quantitySold / variant.inventoryQuantity)*100).toFixed(2)
             }
         )
     })

@@ -6,7 +6,8 @@ let functions = require('../helpers/functions')
 router.get('/', async (req, res) => {
     try {
         const dataResponse = await functions.consolidateData(req.query.startDate, req.query.endDate, req.query.seller)
-        res.json(dataResponse)
+        console.log('Successful Request')
+        res.status(200).json(dataResponse)
     } catch(err) {
         res.status(500).json({ message: err.message})
     }
