@@ -9,7 +9,6 @@ router.get('/', async (req, res) => {
         res.json(dataResponse)
     } catch(err) {
         res.status(500).json({ message: err.message})
-        res.message(`File Name: ${err.fileName} Line: ${err.lineNumber}`)
     }
 })
 

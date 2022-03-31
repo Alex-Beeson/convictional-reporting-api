@@ -22,7 +22,7 @@ async function consolidateData(startDate, endDate, seller) {
         dataToSend = {
             //salesReport: await createSalesReport(fetchedOrders),
             //sellerReport: await createSellerReport(fetchedOrders, fetchedSellers, fetchedProducts),
-            productReport: await createProductReport(fetchedProducts, fetchedOrders),
+            productReport: await createProductReport(fetchedProducts, fetchedOrders, startDate, endDate),
             // operations
             // finance
             // inventoryReport:
@@ -37,6 +37,7 @@ function dateCreator(startDate, endDate) {
         startDate: new Date(startDate),
         endDate: new Date(endDate),
         difference: difference,
+        daysDifference: difference / 86400000,
         previousStartDate: new Date(new Date(startDate) - difference),
         previousEndDate: new Date(startDate)
     }
@@ -279,8 +280,9 @@ async function createSellerReport(orders, sellers, products) {
 }
 
 // Organize All of the Product Values
-async function createProductReport(products, orders) {
-    
+async function createProductReport(products, orders, startDate, endDate) {
+    var dates = dateCreator(startDate, endDate)
+
     // Break Product into Variants
     let variantsList = [];
     products.forEach(product => {
@@ -293,6 +295,8 @@ async function createProductReport(products, orders) {
                 companyId: product.companyId,
                 partnerPrice: variant.partnerPrice,
                 basePrice: variant.basePrice,
+                unitMargin: variant.partnerPrice - variant.basePrice,
+                inventoryQuantity: variant.inventory_quantity,
                 orders: 0,
                 quantitySold: 0,
                 salesVolume: 0,
@@ -333,6 +337,44 @@ async function createProductReport(products, orders) {
         })
     })
 
+    function assessProductGrade(id) {
+        let orderValues = orders.currentOrders.map(x => x.totalRetailPrice)
+        let totalCompanySales = Math.round(sumArray(orderValues)*100) / 100;
+        
+        variantsList.sort(function (a, b) {
+            return b.salesVolume - a.salesVolume 
+        });
+        const a = Math.round(.8 * totalCompanySales) * 100 / 100;
+        const b = a + Math.round(.15 * totalCompanySales) * 100 / 100;
+        const c = b + Math.round(.05 * totalCompanySales) * 100 / 100;
+        console.log(a)
+        console.log(b)
+        console.log(c)
+        
+        var indexOf = variantsList.findIndex(variant => {
+            return variant.sellerVariantId === id;
+        })
+        console.log(indexOf)
+        
+        let valueToTest = 0;
+        
+        for (let i = 0; i < indexOf; i++) {
+
+            valueToTest += variantsList[i].salesVolume
+        }
+        
+        console.log("Resulting Test Value " + valueToTest)
+
+        if (valueToTest <= a) {
+            return "A"
+        } else if ((valueToTest > a) && (valueToTest <= b)) {
+            return "B"
+        } else if (valueToTest > b) {
+             return "C"
+        }
+    }
+
+    // Add the final analysis for trends and Inventory Analysis
     let productBreakdown = variantsList.map(variant => {
         return (
             {
@@ -340,11 +382,16 @@ async function createProductReport(products, orders) {
                 trendOrders: percentDifference(variant.orders,variant.previousOrders),
                 trendQuantitySold: percentDifference(variant.quantitySold,variant.previousQuantitySold),
                 trendSalesVolume: percentDifference(variant.salesVolume,variant.previousSalesVolume),
-                trendProfit: percentDifference(variant.profit,variant.previousProfit)
+                trendProfit: percentDifference(variant.profit,variant.previousProfit),
+                averageDailySales: variant.quantitySold / dates.daysDifference,
+                daysOfInventoryRemaining: variant.inventoryQuantity / (variant.quantitySold / dates.daysDifference),
+                abcAnalysis: assessProductGrade(variant.sellerVariantId),
+                totalValueOfInventoryPrice: variant.inventoryQuantity * variant.partnerPrice,
+                totalValueOfInventoryCost: variant.inventoryQuantity * variant.basePrice,
+                sellThroughRate: (variant.quantitySold / variant.inventoryQuantity)*100
             }
         )
     })
-
     return productBreakdown
 }
 
@@ -355,7 +402,8 @@ async function createProductReport(products, orders) {
 // Organize all of the Finance Values
 
 
-// Organize All of the Inventory Values
+
+
 
 //END REPORT ORGANIZATION
 
